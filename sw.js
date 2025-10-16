@@ -1,5 +1,5 @@
 // sw.js — Elevator Action PWA (cache-first + offline fallback)
-var CACHE = 'elevator-action-v4';
+var CACHE = 'elevator-action-v5';
 var ASSETS = [
   './','./index.html','./styles.css','./app.js','./manifest.webmanifest',
   './assets/icon-192.png','./assets/icon-512.png','./assets/maskable-192.png','./assets/maskable-512.png',
