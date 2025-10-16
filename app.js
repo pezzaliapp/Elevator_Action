@@ -32,6 +32,7 @@ function playSfx(id){
   try { SFX[id].currentTime = 0; SFX[id].play(); } catch(e){}
 }
 
+/* ====================== INPUT ====================== */
 var Keys = {};
 
 var KEYMAP = {
@@ -65,34 +66,52 @@ function onKey(e, down){
     e.returnValue = false;
   }
 }
-document.addEventListener('keydown', function(e){ onKey(e,true); }, false);
-document.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
 
-// touch overlay
+// 🔁 ascolta su window e resetta quando perdi focus
+function resetKeys(){ for (var k in Keys) Keys[k] = false; }
+window.addEventListener('keydown', function(e){ onKey(e,true); }, false);
+window.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
+window.addEventListener('blur',    function(){ resetKeys(); }, false);
+
+// ----- touch overlay (non-passive per poter bloccare lo scroll) -----
 var supportsPassive=false;
-try{ var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
-     window.addEventListener('testPassive',function(){},opts);
-     window.removeEventListener('testPassive',function(){},opts);
+try{
+  var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
+  window.addEventListener('testPassive',function(){},opts);
+  window.removeEventListener('testPassive',function(){},opts);
 }catch(e){}
-var touchOpts = supportsPassive?{passive:true}:false;
+var touchOpts = supportsPassive ? {passive:false} : false;
 
 var touch = document.getElementById('touch');
 if (touch){
-  function onTouchStart(e){
-    var t = e.target;
-    if (t && t.getAttribute && t.getAttribute('data-k')){
-      Keys[t.getAttribute('data-k')] = true;
-      audioUnlocked = true;
-    }
+  function pressKeyFromEl(el, down){
+    if (!el || !el.getAttribute) return;
+    var k = el.getAttribute('data-k');
+    if (!k) return;
+    Keys[k] = !!down;
+    if (down) audioUnlocked = true;
   }
-  function onTouchEnd(e){
-    var t = e.target;
-    if (t && t.getAttribute && t.getAttribute('data-k')){
-      Keys[t.getAttribute('data-k')] = false;
+  function updateFromTouch(evt, down){
+    if (evt.changedTouches && evt.changedTouches.length){
+      var t = evt.changedTouches[0];
+      var el = document.elementFromPoint(t.clientX, t.clientY);
+      pressKeyFromEl(el, down);
+    } else {
+      pressKeyFromEl(evt.target, down);
     }
+    if (evt.preventDefault) evt.preventDefault(); // evita scroll/zoom
   }
-  touch.addEventListener('touchstart', onTouchStart, touchOpts);
-  touch.addEventListener('touchend', onTouchEnd, touchOpts);
+
+  // touch (premi, trascina, rilascia)
+  touch.addEventListener('touchstart', function(e){ updateFromTouch(e, true); }, touchOpts);
+  touch.addEventListener('touchmove',  function(e){ updateFromTouch(e, true); }, touchOpts);
+  touch.addEventListener('touchend',   function(e){ updateFromTouch(e, false); }, touchOpts);
+  touch.addEventListener('touchcancel',function(e){ updateFromTouch(e, false); }, touchOpts);
+
+  // mouse (desktop)
+  touch.addEventListener('mousedown',  function(e){ updateFromTouch(e, true); }, false);
+  touch.addEventListener('mouseup',    function(e){ updateFromTouch(e, false); }, false);
+  touch.addEventListener('mouseleave', function(){ resetKeys(); }, false);
 }
 
 // mute
@@ -107,6 +126,7 @@ if (btnMute){
 // service worker
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
 
+/* ====================== GAME ====================== */
 var W = canvas.width, H = canvas.height;
 var TILE = 16;
 var GRAV = 0.7;
@@ -162,6 +182,7 @@ function Hero(x,y){
 }
 Hero.prototype.update=function(world){
   var speed=1.6;
+
   if (this.inElevator){
     if (Keys['ArrowUp']) this.inElevator.vy = -this.inElevator.speed;
     else if (Keys['ArrowDown']) this.inElevator.vy = this.inElevator.speed;
@@ -187,12 +208,14 @@ Hero.prototype.update=function(world){
     if (fy!==null && this.y+this.h>fy){ this.y=fy-this.h; this.vy=0; this.onGround=true; }
     else this.onGround=false;
   }
+
   if (this.reloading>0) this.reloading--;
   var fire = Keys['Enter']||Keys['Space']||Keys['KeyX']||Keys['KeyK'];
   if (fire && this.reloading===0){
     world.spawnBullet(this.x+this.w/2, this.y+6, this.facing);
     this.reloading=14; playSfx('shot');
   }
+
   this.x = clamp(this.x,4,W-14);
   if (this.y+this.h>=H-8 && world.intelLeft()===0){ world.winLevel(); }
 };
@@ -321,10 +344,17 @@ function bootstrap(){
   startLevel(0);
   setTimeout(function(){ var b=document.getElementById('banner'); if(b) b.style.display='none'; }, 5000);
   setInterval(updateHud,200);
+
   var unlock=function(){ audioUnlocked=true; };
   canvas.addEventListener('touchstart', unlock, touchOpts);
   canvas.addEventListener('mousedown', unlock, false);
-  try{ canvas.focus(); }catch(e){}
+
+  // focus canvas sempre (desktop e mobile)
+  function focusCanvas(){ try{ canvas.focus(); }catch(e){} }
+  focusCanvas();
+  document.addEventListener('mousedown', focusCanvas, false);
+  document.addEventListener('touchstart', focusCanvas, touchOpts);
+
   loop();
 }
 bootstrap();
