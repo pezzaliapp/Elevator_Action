@@ -17,14 +17,29 @@
     header h1{margin:0;font-size:16px}
     #gamebox{flex:1;display:flex;align-items:center;justify-content:center;padding:10px}
     canvas{background:#090f28;border:1px solid #1a2559;border-radius:12px;touch-action:none}
-    #hud{position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px}
+    #hud{position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;z-index:10000}
     #hud span{margin-right:10px}
-    #touch{position:fixed;left:0;right:0;bottom:0;height:140px;background:linear-gradient(#0e1533cc,#0e1533ee);display:flex;gap:10px;align-items:center;justify-content:center;padding:12px}
-    .btn{user-select:none;-webkit-user-select:none;touch-action:manipulation;border:1px solid #1a2559;background:#141c44;color:#eaf1ff;border-radius:16px;padding:10px 14px;min-width:60px;text-align:center}
-    .pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,56px);gap:8px}
-    .wide{min-width:100px}
-    #banner{position:fixed;left:12px;bottom:160px;background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:8px 10px;max-width:70vw}
+
+    /* === Overlay touch, ottimizzato per iPhone === */
+    #touch{
+      position:fixed;left:0;right:0;bottom:0;z-index:9999;
+      padding:12px 10px calc(env(safe-area-inset-bottom,0px) + 12px);
+      background:linear-gradient(#0e1533cc,#0e1533ee);
+      display:flex;gap:10px;align-items:center;justify-content:center;
+      touch-action:none; -webkit-user-select:none; user-select:none;
+    }
+    .pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,64px);gap:10px}
+    .btn{user-select:none;-webkit-user-select:none;touch-action:manipulation;border:1px solid #1a2559;background:#141c44;color:#eaf1ff;border-radius:16px;padding:14px 16px;min-width:64px;text-align:center}
+    .wide{min-width:120px;font-weight:600}
+    #banner{position:fixed;left:12px;bottom:calc(160px + env(safe-area-inset-bottom,0px));background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:8px 10px;max-width:70vw}
+
+    /* su schermi larghi nascondi il pad */
     @media (min-width:900px){ #touch{display:none} }
+
+    /* su mobile lascia spazio sotto il canvas per non coprire il gioco */
+    @media (max-width:900px){
+      #gamebox{padding:10px 10px 190px}
+    }
   </style>
 </head>
 <body>
