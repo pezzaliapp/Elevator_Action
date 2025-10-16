@@ -39,14 +39,22 @@ var showDebug = false;
 var KEYMAP = {
   37:'ArrowLeft', 38:'ArrowUp', 39:'ArrowRight', 40:'ArrowDown',
   13:'Enter', 32:'Space',
-  65:'ArrowLeft', 68:'ArrowRight', 87:'ArrowUp', 83:'ArrowDown',
+  65:'ArrowLeft', 68:'ArrowRight', 87:'ArrowUp', 83:'ArrowDown', // WASD (legacy keyCode)
   90:'KeyZ', 74:'KeyJ',
   88:'KeyX', 75:'KeyK',
   72:'KeyH'
 };
 
 function keyName(e){
-  if (e.code) return e.code;
+  // Modern: usa e.code e mappa WASD -> Arrow*
+  if (e.code) {
+    if (e.code==='KeyA') return 'ArrowLeft';
+    if (e.code==='KeyD') return 'ArrowRight';
+    if (e.code==='KeyW') return 'ArrowUp';
+    if (e.code==='KeyS') return 'ArrowDown';
+    return e.code;
+  }
+  // Fallback: e.key
   if (e.key) {
     if (e.key === ' ') return 'Space';
     if (e.key === 'Left') return 'ArrowLeft';
@@ -55,6 +63,7 @@ function keyName(e){
     if (e.key === 'Down') return 'ArrowDown';
     return e.key;
   }
+  // Legacy: keyCode
   var k = e.keyCode || e.which || 0;
   return KEYMAP[k] || ('Key'+k);
 }
@@ -64,6 +73,8 @@ function onKey(e, down){
   if (name === 'KeyH' && down){ showDebug = !showDebug; }
   Keys[name] = down;
   if (!audioUnlocked && down) audioUnlocked = true;
+
+  // Evita scroll
   if (name==='Space'||name==='Enter'||(name && name.indexOf('Arrow')===0)){
     if (e.preventDefault) e.preventDefault();
     e.returnValue = false;
@@ -75,7 +86,7 @@ window.addEventListener('keydown', function(e){ onKey(e,true); }, false);
 window.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
 window.addEventListener('blur',    function(){ resetKeys(); }, false);
 
-// touch overlay (non-passive per bloccare lo scroll)
+// ------ TOUCH PAD ROBUSTO (multi-dito) ------
 var supportsPassive=false;
 try{
   var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
@@ -85,32 +96,61 @@ try{
 var touchOpts = supportsPassive ? {passive:false} : false;
 
 var touch = document.getElementById('touch');
+// mappa touchId -> key premuta da quel dito
+var touchKeys = {};
+
+function keyFromPoint(x,y){
+  var el = document.elementFromPoint(x,y);
+  if (!el || !el.getAttribute) return null;
+  return el.getAttribute('data-k') || null;
+}
+function setKey(k, down){
+  if (!k) return;
+  Keys[k] = !!down;
+  if (down) audioUnlocked = true;
+}
+
 if (touch){
-  function pressKeyFromEl(el, down){
-    if (!el || !el.getAttribute) return;
-    var k = el.getAttribute('data-k');
-    if (!k) return;
-    Keys[k] = !!down;
-    if (down) audioUnlocked = true;
-  }
-  function updateFromTouch(evt, down){
-    if (evt.changedTouches && evt.changedTouches.length){
-      var t = evt.changedTouches[0];
-      var el = document.elementFromPoint(t.clientX, t.clientY);
-      pressKeyFromEl(el, down);
-    } else {
-      pressKeyFromEl(evt.target, down);
+  touch.addEventListener('touchstart', function(e){
+    for (var i=0;i<e.changedTouches.length;i++){
+      var t = e.changedTouches[i];
+      var k = keyFromPoint(t.clientX, t.clientY);
+      if (k){ touchKeys[t.identifier] = k; setKey(k, true); }
     }
-    if (evt.preventDefault) evt.preventDefault();
+    if (e.preventDefault) e.preventDefault();
+  }, touchOpts);
+
+  touch.addEventListener('touchmove', function(e){
+    for (var i=0;i<e.changedTouches.length;i++){
+      var t = e.changedTouches[i];
+      var prev = touchKeys[t.identifier];
+      var k = keyFromPoint(t.clientX, t.clientY);
+      if (k !== prev){
+        if (prev) setKey(prev, false);
+        if (k){ touchKeys[t.identifier] = k; setKey(k, true); }
+        else { delete touchKeys[t.identifier]; }
+      }
+    }
+    if (e.preventDefault) e.preventDefault();
+  }, touchOpts);
+
+  function endTouches(e){
+    for (var i=0;i<e.changedTouches.length;i++){
+      var t = e.changedTouches[i];
+      var prev = touchKeys[t.identifier];
+      if (prev) setKey(prev, false);
+      delete touchKeys[t.identifier];
+    }
+    // sicurezza: se non restano dita, rilascia tutto
+    if (!e.touches || e.touches.length===0) resetKeys();
+    if (e.preventDefault) e.preventDefault();
   }
-  // touch: premi/trascina/rilascia
-  touch.addEventListener('touchstart', function(e){ updateFromTouch(e,true); }, touchOpts);
-  touch.addEventListener('touchmove',  function(e){ updateFromTouch(e,true); }, touchOpts);
-  touch.addEventListener('touchend',   function(e){ updateFromTouch(e,false); }, touchOpts);
-  touch.addEventListener('touchcancel',function(e){ updateFromTouch(e,false); }, touchOpts);
-  // mouse: desktop
-  touch.addEventListener('mousedown',  function(e){ updateFromTouch(e,true); }, false);
-  touch.addEventListener('mouseup',    function(e){ updateFromTouch(e,false); }, false);
+  touch.addEventListener('touchend', endTouches, touchOpts);
+  touch.addEventListener('touchcancel', endTouches, touchOpts);
+
+  // Mouse (desktop)
+  touch.addEventListener('mousedown',  function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,true); }, false);
+  touch.addEventListener('mouseup',    function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,false); }, false);
   touch.addEventListener('mouseleave', function(){ resetKeys(); }, false);
 }
 
@@ -127,8 +167,7 @@ if (btnControls){
   btnControls.addEventListener('click', function(){
     var pad = document.getElementById('touch');
     if (!pad) return;
-    if (pad.classList.contains('hidden')) pad.classList.remove('hidden');
-    else pad.classList.add('hidden');
+    pad.classList.toggle('hidden');
   }, false);
 }
 
@@ -169,37 +208,53 @@ function Hero(x,y){
 }
 Hero.prototype.update=function(world){
   var speed=1.6;
+
   if (this.inElevator){
-    if (Keys['ArrowUp']) this.inElevator.vy = -this.inElevator.speed;
-    else if (Keys['ArrowDown']) this.inElevator.vy = this.inElevator.speed;
-    else this.inElevator.vy = 0;
-    if (Keys['ArrowLeft']) { this.x -= 1; this.inElevator=null; }
-    if (Keys['ArrowRight']){ this.x += 1; this.inElevator=null; }
-    this.y = this.inElevator.y - this.h;
+    // tieni un riferimento PRIMA di poter uscire
+    var el = this.inElevator;
+
+    if (Keys['ArrowUp']) el.vy = -el.speed;
+    else if (Keys['ArrowDown']) el.vy = el.speed;
+    else el.vy = 0;
+
+    var left = !!Keys['ArrowLeft'];
+    var right = !!Keys['ArrowRight'];
+    if (left || right){
+      this.x += (left?-1:1);
+      this.inElevator = null; // esci dall'ascensore
+    }
+
+    // usa sempre 'el' (può essere uscito dall'ascensore)
+    this.y = el.y - this.h;
+
   } else {
     if (Keys['ArrowLeft']) { this.vx -= 0.5; this.facing=-1; }
     if (Keys['ArrowRight']){ this.vx += 0.5; this.facing= 1; }
     if (Keys['ArrowUp']){
-      var el = world.elevatorsNear(this);
-      if (el && Math.abs(el.x-(this.x+this.w/2))<6 && Math.abs((el.y - this.h) - this.y) < 4){
-        this.inElevator = el; playSfx('door');
+      var el2 = world.elevatorsNear(this);
+      if (el2 && Math.abs(el2.x-(this.x+this.w/2))<6 && Math.abs((el2.y - this.h) - this.y) < 4){
+        this.inElevator = el2; playSfx('door');
       }
     }
     this.vy += GRAV;
     this.vx *= FRICTION;
     if (this.vx> speed) this.vx = speed;
     if (this.vx<-speed) this.vx = -speed;
+
     this.x += this.vx; this.y += this.vy;
+
     var fy = world.snapFloor(this);
     if (fy!==null && this.y+this.h>fy){ this.y=fy-this.h; this.vy=0; this.onGround=true; }
     else this.onGround=false;
   }
+
   if (this.reloading>0) this.reloading--;
   var fire = Keys['Enter']||Keys['Space']||Keys['KeyX']||Keys['KeyK'];
   if (fire && this.reloading===0){
     world.spawnBullet(this.x+this.w/2, this.y+6, this.facing);
     this.reloading=14; playSfx('shot');
   }
+
   this.x = clamp(this.x,4,W-14);
   if (this.y+this.h>=H-8 && world.intelLeft()===0){ world.winLevel(); }
 };
@@ -272,7 +327,13 @@ World.prototype.snapFloor=function(ent){
   var closest=null; for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); if (ent.y+ent.h<=y && (closest===null || y<closest)) closest=y; } return closest;
 };
 World.prototype.elevatorsNear=function(ent){
-  for (var i=0;i<this.elevs.length;i++){ var el=this.elevs[i]; var nearX=Math.abs((ent.x+ent.w/2)-el.x)<8; var nearY=Math.abs((el.y-ent.h)-ent.y)<5; if (nearX && nearY) return el; } return null;
+  for (var i=0;i<this.elevs.length;i++){
+    var el=this.elevs[i];
+    var nearX=Math.abs((ent.x+ent.w/2)-el.x)<8;
+    var nearY=Math.abs((el.y-ent.h)-ent.y)<5;
+    if (nearX && nearY) return el;
+  }
+  return null;
 };
 World.prototype.spawnBullet=function(x,y,dir,evil){ this.bullets.push(new Bullet(x,y,dir,evil)); };
 World.prototype.hurtHero=function(){ if (state.lives>0) state.lives--; if (state.lives<=0) state.gameOver=true; this.hero=new Hero(24,floorY(0,this.floors)-20); };
@@ -341,7 +402,7 @@ function bootstrap(){
   canvas.addEventListener('touchstart', unlock, touchOpts);
   canvas.addEventListener('mousedown', unlock, false);
 
-  // focus canvas sempre (desktop e mobile)
+  // focus canvas sempre
   function focusCanvas(){ try{ canvas.focus(); }catch(e){} }
   focusCanvas();
   document.addEventListener('mousedown', focusCanvas, false);
