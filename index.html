@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Elevator Action — PezzaliAPP Edition (PWA)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1022">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" href="./assets/icon-192.png">
+  <style>
+    html,body{height:100%}
+    body{margin:0;background:#0b1022;color:#eaf1ff;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    #wrap{display:flex;flex-direction:column;min-height:100%}
+    header{padding:8px 12px;background:#0e1533;border-bottom:1px solid #1a2559}
+    header h1{margin:0;font-size:16px}
+    #gamebox{flex:1;display:flex;align-items:center;justify-content:center;padding:10px}
+    canvas{background:#090f28;border:1px solid #1a2559;border-radius:12px;touch-action:none}
+    #hud{position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px}
+    #hud span{margin-right:10px}
+    #touch{position:fixed;left:0;right:0;bottom:0;height:140px;background:linear-gradient(#0e1533cc,#0e1533ee);display:flex;gap:10px;align-items:center;justify-content:center;padding:12px}
+    .btn{user-select:none;-webkit-user-select:none;touch-action:manipulation;border:1px solid #1a2559;background:#141c44;color:#eaf1ff;border-radius:16px;padding:10px 14px;min-width:60px;text-align:center}
+    .pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,56px);gap:8px}
+    .wide{min-width:100px}
+    #banner{position:fixed;left:12px;bottom:160px;background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:8px 10px;max-width:70vw}
+    @media (min-width:900px){ #touch{display:none} }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>Elevator Action — PezzaliAPP Edition</h1>
+  </header>
+
+  <div id="gamebox">
+    <canvas id="screen" width="384" height="512" aria-label="Elevator Action Game Canvas"></canvas>
+  </div>
+
+  <div id="hud">
+    <span id="level">LV 1</span>
+    <span id="intel">📄 0/0</span>
+    <span id="lives">❤❤❤</span>
+    <button id="btnMute" class="btn">🔊</button>
+    <button id="btnInstall" class="btn" style="display:none">⬇️ Installa</button>
+  </div>
+
+  <div id="touch">
+    <div class="pad" aria-hidden="true">
+      <div class="btn" data-k="ArrowLeft">◀︎</div>
+      <div class="btn" data-k="ArrowDown">▼</div>
+      <div class="btn" data-k="ArrowRight">▶︎</div>
+      <div class="btn" data-k="KeyZ">A</div>
+      <div class="btn" data-k="KeyX">B</div>
+      <div class="btn" data-k="Space">⏸</div>
+    </div>
+    <div class="btn wide" data-k="ArrowUp">SALI/ENTRA</div>
+    <div class="btn wide" data-k="Enter">FIRE</div>
+  </div>
+
+  <div id="banner">Suggerimento: raccogli i documenti dietro le <b>porte rosse</b>, poi raggiungi l'uscita al piano terra.</div>
+</div>
+
+<!-- Audio fallback: verrà sbloccato al primo tap/tasto -->
+<audio id="sfx_step"></audio>
+<audio id="sfx_door"></audio>
+<audio id="sfx_pick"></audio>
+<audio id="sfx_shot"></audio>
+
+<script src="./app.js"></script>
+<script>
+// PWA install prompt
+(function(){
+  var btn = document.getElementById('btnInstall');
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault(); deferred = e; btn.style.display='inline-block';
+  });
+  btn.addEventListener('click', function(){
+    if(deferred){ deferred.prompt(); deferred=null; btn.style.display='none'; }
+  });
+})();
+</script>
+</body>
+</html>
