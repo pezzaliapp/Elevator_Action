@@ -474,7 +474,12 @@ function bootstrap() {
 
   setInterval(updateHud, 200);
 
-  // sblocco audio su iOS8 al primo tap
-  canvas.addEventListener('touchstart', function () { audioUnlocked = true; }, touchOpts);
+  // sblocco audio su primo tap/click (iOS8 e desktop)
+  var unlock = function(){ audioUnlocked = true; };
+  canvas.addEventListener('touchstart', unlock, touchOpts);
+  canvas.addEventListener('mousedown', unlock, false);
+
+  // 👉 AVVIA il render loop
+  loop();
 }
 bootstrap();
