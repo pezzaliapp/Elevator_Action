@@ -34,13 +34,15 @@ function playSfx(id){
 
 /* ====================== INPUT ====================== */
 var Keys = {};
+var showDebug = false;
 
 var KEYMAP = {
   37:'ArrowLeft', 38:'ArrowUp', 39:'ArrowRight', 40:'ArrowDown',
   13:'Enter', 32:'Space',
-  65:'ArrowLeft', 68:'ArrowRight', 87:'ArrowUp', 83:'ArrowDown', // WASD
-  90:'KeyZ', 74:'KeyJ', // action
-  88:'KeyX', 75:'KeyK'  // fire
+  65:'ArrowLeft', 68:'ArrowRight', 87:'ArrowUp', 83:'ArrowDown',
+  90:'KeyZ', 74:'KeyJ',
+  88:'KeyX', 75:'KeyK',
+  72:'KeyH'
 };
 
 function keyName(e){
@@ -59,21 +61,21 @@ function keyName(e){
 
 function onKey(e, down){
   var name = keyName(e);
+  if (name === 'KeyH' && down){ showDebug = !showDebug; }
   Keys[name] = down;
   if (!audioUnlocked && down) audioUnlocked = true;
-  if (name==='Space'||name==='Enter'||name.indexOf('Arrow')===0){
+  if (name==='Space'||name==='Enter'||(name && name.indexOf('Arrow')===0)){
     if (e.preventDefault) e.preventDefault();
     e.returnValue = false;
   }
 }
 
-// 🔁 ascolta su window e resetta quando perdi focus
 function resetKeys(){ for (var k in Keys) Keys[k] = false; }
 window.addEventListener('keydown', function(e){ onKey(e,true); }, false);
 window.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
 window.addEventListener('blur',    function(){ resetKeys(); }, false);
 
-// ----- touch overlay (non-passive per poter bloccare lo scroll) -----
+// touch overlay (non-passive per bloccare lo scroll)
 var supportsPassive=false;
 try{
   var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
@@ -99,27 +101,34 @@ if (touch){
     } else {
       pressKeyFromEl(evt.target, down);
     }
-    if (evt.preventDefault) evt.preventDefault(); // evita scroll/zoom
+    if (evt.preventDefault) evt.preventDefault();
   }
-
-  // touch (premi, trascina, rilascia)
-  touch.addEventListener('touchstart', function(e){ updateFromTouch(e, true); }, touchOpts);
-  touch.addEventListener('touchmove',  function(e){ updateFromTouch(e, true); }, touchOpts);
-  touch.addEventListener('touchend',   function(e){ updateFromTouch(e, false); }, touchOpts);
-  touch.addEventListener('touchcancel',function(e){ updateFromTouch(e, false); }, touchOpts);
-
-  // mouse (desktop)
-  touch.addEventListener('mousedown',  function(e){ updateFromTouch(e, true); }, false);
-  touch.addEventListener('mouseup',    function(e){ updateFromTouch(e, false); }, false);
+  // touch: premi/trascina/rilascia
+  touch.addEventListener('touchstart', function(e){ updateFromTouch(e,true); }, touchOpts);
+  touch.addEventListener('touchmove',  function(e){ updateFromTouch(e,true); }, touchOpts);
+  touch.addEventListener('touchend',   function(e){ updateFromTouch(e,false); }, touchOpts);
+  touch.addEventListener('touchcancel',function(e){ updateFromTouch(e,false); }, touchOpts);
+  // mouse: desktop
+  touch.addEventListener('mousedown',  function(e){ updateFromTouch(e,true); }, false);
+  touch.addEventListener('mouseup',    function(e){ updateFromTouch(e,false); }, false);
   touch.addEventListener('mouseleave', function(){ resetKeys(); }, false);
 }
 
-// mute
+// mute + toggle controls
 var btnMute = document.getElementById('btnMute');
 if (btnMute){
   btnMute.addEventListener('click', function(){
     audioEnabled = !audioEnabled;
     btnMute.textContent = audioEnabled ? '🔊' : '🔇';
+  }, false);
+}
+var btnControls = document.getElementById('btnControls');
+if (btnControls){
+  btnControls.addEventListener('click', function(){
+    var pad = document.getElementById('touch');
+    if (!pad) return;
+    if (pad.classList.contains('hidden')) pad.classList.remove('hidden');
+    else pad.classList.add('hidden');
   }, false);
 }
 
@@ -128,61 +137,38 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js');
 
 /* ====================== GAME ====================== */
 var W = canvas.width, H = canvas.height;
-var TILE = 16;
-var GRAV = 0.7;
-var FRICTION = 0.85;
-var MAX_LIVES = 3;
+var GRAV = 0.7, FRICTION = 0.85, MAX_LIVES = 3;
 
 var COLORS = {
   bg:'#101634', wall:'#2b396b', door:'#3e8ef7', redDoor:'#f74d4d',
   elevator:'#c7d2fe', hero:'#ffe08a', enemy:'#ff6b6b', bullet:'#eaf1ff', text:'#eaf1ff'
 };
 
-var LEVELS = [
-  {
-    floors: 8,
-    doors: [
-      {x:64,floor:1,red:true},{x:160,floor:2,red:false},{x:288,floor:3,red:true},
-      {x:48,floor:4,red:false},{x:208,floor:5,red:false},{x:320,floor:6,red:true}
-    ],
-    elevators: [
-      {x:112,yMin:64,yMax:H-48,speed:1.1},
-      {x:240,yMin:80,yMax:H-64,speed:1.0}
-    ],
-    enemies: [
-      {x:300,floor:2,dir:-1},{x:80,floor:4,dir:1},{x:220,floor:6,dir:-1}
-    ]
-  },
-  {
-    floors: 10,
-    doors: [
-      {x:48,floor:1,red:true},{x:96,floor:3,red:true},{x:144,floor:4,red:false},
-      {x:192,floor:6,red:true},{x:256,floor:7,red:false},{x:304,floor:8,red:true}
-    ],
-    elevators: [
-      {x:80,yMin:64,yMax:H-32,speed:1.2},
-      {x:192,yMin:48,yMax:H-48,speed:1.0},
-      {x:304,yMin:96,yMax:H-64,speed:0.9}
-    ],
-    enemies: [
-      {x:260,floor:2,dir:1},{x:120,floor:5,dir:-1},{x:200,floor:7,dir:1},{x:320,floor:8,dir:-1}
-    ]
-  }
-];
-
-var state = { levelIndex:0, lives:MAX_LIVES, gameOver:false };
-
 function floorY(floor, totalFloors){ var step=(H-64)/(totalFloors-1); return 32 + step*floor; }
 function clamp(v,min,max){ return v<min?min:(v>max?max:v); }
 function rectsOverlap(a,b){ return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h); }
 
+var LEVELS = [
+  { floors:8,
+    doors:[{x:64,floor:1,red:true},{x:160,floor:2,red:false},{x:288,floor:3,red:true},
+           {x:48,floor:4,red:false},{x:208,floor:5,red:false},{x:320,floor:6,red:true}],
+    elevators:[{x:112,yMin:64,yMax:H-48,speed:1.1},{x:240,yMin:80,yMax:H-64,speed:1.0}],
+    enemies:[{x:300,floor:2,dir:-1},{x:80,floor:4,dir:1},{x:220,floor:6,dir:-1}] },
+  { floors:10,
+    doors:[{x:48,floor:1,red:true},{x:96,floor:3,red:true},{x:144,floor:4,red:false},
+           {x:192,floor:6,red:true},{x:256,floor:7,red:false},{x:304,floor:8,red:true}],
+    elevators:[{x:80,yMin:64,yMax:H-32,speed:1.2},{x:192,yMin:48,yMax:H-48,speed:1.0},{x:304,yMin:96,yMax:H-64,speed:0.9}],
+    enemies:[{x:260,floor:2,dir:1},{x:120,floor:5,dir:-1},{x:200,floor:7,dir:1},{x:320,floor:8,dir:-1}] }
+];
+
+var state = { levelIndex:0, lives:MAX_LIVES, gameOver:false };
+
 function Hero(x,y){
-  this.x=x; this.y=y; this.vx=0; this.vy=0;
-  this.w=10; this.h=14; this.facing=1; this.onGround=false; this.inElevator=null; this.reloading=0;
+  this.x=x; this.y=y; this.vx=0; this.vy=0; this.w=10; this.h=14;
+  this.facing=1; this.onGround=false; this.inElevator=null; this.reloading=0;
 }
 Hero.prototype.update=function(world){
   var speed=1.6;
-
   if (this.inElevator){
     if (Keys['ArrowUp']) this.inElevator.vy = -this.inElevator.speed;
     else if (Keys['ArrowDown']) this.inElevator.vy = this.inElevator.speed;
@@ -208,14 +194,12 @@ Hero.prototype.update=function(world){
     if (fy!==null && this.y+this.h>fy){ this.y=fy-this.h; this.vy=0; this.onGround=true; }
     else this.onGround=false;
   }
-
   if (this.reloading>0) this.reloading--;
   var fire = Keys['Enter']||Keys['Space']||Keys['KeyX']||Keys['KeyK'];
   if (fire && this.reloading===0){
     world.spawnBullet(this.x+this.w/2, this.y+6, this.facing);
     this.reloading=14; playSfx('shot');
   }
-
   this.x = clamp(this.x,4,W-14);
   if (this.y+this.h>=H-8 && world.intelLeft()===0){ world.winLevel(); }
 };
@@ -312,6 +296,14 @@ World.prototype.draw=function(){
   for (i=0;i<this.bullets.length;i++) this.bullets[i].draw();
   this.hero.draw();
   ctx.fillStyle=COLORS.text; ctx.font='12px monospace'; ctx.fillText('Docs:'+this.intelGot+'/'+this.intelTotal,8,12);
+
+  if (showDebug){
+    var ktext = Object.keys(Keys).filter(function(k){return Keys[k];}).join(' ');
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(6, H-36, 220, 30);
+    ctx.fillStyle='#fff'; ctx.font='11px monospace';
+    ctx.fillText('Keys: '+ktext, 10, H-16);
+  }
 };
 World.prototype.winLevel=function(){ state.levelIndex++; if (state.levelIndex>=LEVELS.length) state.levelIndex=0; startLevel(state.levelIndex); };
 
