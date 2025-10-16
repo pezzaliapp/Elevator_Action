@@ -29,12 +29,10 @@
 </head>
 <body>
 <div id="wrap">
-  <header>
-    <h1>Elevator Action — PezzaliAPP Edition</h1>
-  </header>
+  <header><h1>Elevator Action — PezzaliAPP Edition</h1></header>
 
   <div id="gamebox">
-    <canvas id="screen" width="384" height="512" aria-label="Elevator Action Game Canvas"></canvas>
+    <canvas id="screen" width="384" height="512" tabindex="0" aria-label="Elevator Action Game Canvas"></canvas>
   </div>
 
   <div id="hud">
@@ -61,7 +59,7 @@
   <div id="banner">Suggerimento: raccogli i documenti dietro le <b>porte rosse</b>, poi raggiungi l'uscita al piano terra.</div>
 </div>
 
-<!-- Audio fallback: verrà sbloccato al primo tap/tasto -->
+<!-- Audio elements -->
 <audio id="sfx_step"></audio>
 <audio id="sfx_door"></audio>
 <audio id="sfx_pick"></audio>
@@ -69,7 +67,6 @@
 
 <script src="./app.js"></script>
 <script>
-// PWA install prompt
 (function(){
   var btn = document.getElementById('btnInstall');
   var deferred = null;
