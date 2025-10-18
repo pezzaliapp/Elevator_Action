@@ -1,14 +1,11 @@
-/* app.js — Elevator Action — PezzaliAPP Edition (ES5)
-   Compat: iOS 8.4.1 (Safari 8) + modern browsers.
-*/
-
-if (!window.requestAnimationFrame) {
-  window.requestAnimationFrame = function (cb) { return setTimeout(cb, 16); };
-}
+/* app.js — Elevator Action — PezzaliAPP Edition (ES5) */
+if (!window.requestAnimationFrame) { window.requestAnimationFrame = function (cb) { return setTimeout(cb, 16); }; }
 
 var canvas = document.getElementById('screen');
-var ctx = canvas.getContext('2d');
+var ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
+if (!canvas || !ctx) { alert('Canvas non inizializzato.'); throw new Error('Canvas missing'); }
 
+var started = false;        // ▶️ gating avvio
 var audioEnabled = true;
 var audioUnlocked = false;
 var SFX = {};
@@ -20,12 +17,10 @@ var AUDIO_SPRITES = {
 };
 
 function loadAudio() {
-  var ids = ['step','door','pick','shot'];
-  for (var i=0;i<ids.length;i++){
-    var id = ids[i];
+  ['step','door','pick','shot'].forEach(function(id){
     var el = document.getElementById('sfx_'+id);
     if (el) { el.src = AUDIO_SPRITES[id] || ''; SFX[id] = el; }
-  }
+  });
 }
 function playSfx(id){
   if (!audioEnabled || !audioUnlocked || !SFX[id]) return;
@@ -36,57 +31,35 @@ function playSfx(id){
 var Keys = {};
 var showDebug = false;
 
-var KEYMAP = {
-  37:'ArrowLeft', 38:'ArrowUp', 39:'ArrowRight', 40:'ArrowDown',
-  13:'Enter', 32:'Space',
-  65:'ArrowLeft', 68:'ArrowRight', 87:'ArrowUp', 83:'ArrowDown', // WASD (legacy keyCode)
-  90:'KeyZ', 74:'KeyJ',
-  88:'KeyX', 75:'KeyK',
-  72:'KeyH'
-};
+var KEYMAP = {37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',13:'Enter',32:'Space',65:'ArrowLeft',68:'ArrowRight',87:'ArrowUp',83:'ArrowDown',90:'KeyZ',74:'KeyJ',88:'KeyX',75:'KeyK',72:'KeyH'};
 
 function keyName(e){
-  // Modern: usa e.code e mappa WASD -> Arrow*
-  if (e.code) {
-    if (e.code==='KeyA') return 'ArrowLeft';
-    if (e.code==='KeyD') return 'ArrowRight';
-    if (e.code==='KeyW') return 'ArrowUp';
-    if (e.code==='KeyS') return 'ArrowDown';
-    return e.code;
-  }
-  // Fallback: e.key
-  if (e.key) {
-    if (e.key === ' ') return 'Space';
-    if (e.key === 'Left') return 'ArrowLeft';
-    if (e.key === 'Right') return 'ArrowRight';
-    if (e.key === 'Up') return 'ArrowUp';
-    if (e.key === 'Down') return 'ArrowDown';
-    return e.key;
-  }
-  // Legacy: keyCode
-  var k = e.keyCode || e.which || 0;
-  return KEYMAP[k] || ('Key'+k);
+  if (e.code) { if (e.code==='KeyA') return 'ArrowLeft'; if (e.code==='KeyD') return 'ArrowRight'; if (e.code==='KeyW') return 'ArrowUp'; if (e.code==='KeyS') return 'ArrowDown'; return e.code; }
+  if (e.key) { if (e.key===' ') return 'Space'; if (e.key==='Left') return 'ArrowLeft'; if (e.key==='Right') return 'ArrowRight'; if (e.key==='Up') return 'ArrowUp'; if (e.key==='Down') return 'ArrowDown'; return e.key; }
+  var k=e.keyCode||e.which||0; return KEYMAP[k]||('Key'+k);
 }
-
 function onKey(e, down){
   var name = keyName(e);
   if (name === 'KeyH' && down){ showDebug = !showDebug; }
   Keys[name] = down;
   if (!audioUnlocked && down) audioUnlocked = true;
 
-  // Evita scroll
   if (name==='Space'||name==='Enter'||(name && name.indexOf('Arrow')===0)){
     if (e.preventDefault) e.preventDefault();
     e.returnValue = false;
   }
-}
 
+  // START con Enter/Space
+  if (!started && down && (name==='Enter' || name==='Space')) {
+    startGame();
+  }
+}
 function resetKeys(){ for (var k in Keys) Keys[k] = false; }
 window.addEventListener('keydown', function(e){ onKey(e,true); }, false);
 window.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
 window.addEventListener('blur',    function(){ resetKeys(); }, false);
 
-// ------ TOUCH PAD ROBUSTO (multi-dito) ------
+// TOUCH PAD
 var supportsPassive=false;
 try{
   var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
@@ -95,96 +68,44 @@ try{
 }catch(e){}
 var touchOpts = supportsPassive ? {passive:false} : false;
 
-var touch = document.getElementById('touch');
-// mappa touchId -> key premuta da quel dito
-var touchKeys = {};
-
+var controls = document.getElementById('controls');
 function keyFromPoint(x,y){
   var el = document.elementFromPoint(x,y);
   if (!el || !el.getAttribute) return null;
   return el.getAttribute('data-k') || null;
 }
-function setKey(k, down){
-  if (!k) return;
-  Keys[k] = !!down;
-  if (down) audioUnlocked = true;
-}
+function setKey(k, down){ if (!k) return; Keys[k] = !!down; if (down) audioUnlocked = true; }
 
-if (touch){
-  touch.addEventListener('touchstart', function(e){
+if (controls){
+  controls.addEventListener('touchstart', function(e){
     for (var i=0;i<e.changedTouches.length;i++){
-      var t = e.changedTouches[i];
-      var k = keyFromPoint(t.clientX, t.clientY);
-      if (k){ touchKeys[t.identifier] = k; setKey(k, true); }
+      var t=e.changedTouches[i]; var k=keyFromPoint(t.clientX,t.clientY); if (k){ setKey(k,true); }
     }
     if (e.preventDefault) e.preventDefault();
   }, touchOpts);
-
-  touch.addEventListener('touchmove', function(e){
+  controls.addEventListener('touchend', function(e){
     for (var i=0;i<e.changedTouches.length;i++){
-      var t = e.changedTouches[i];
-      var prev = touchKeys[t.identifier];
-      var k = keyFromPoint(t.clientX, t.clientY);
-      if (k !== prev){
-        if (prev) setKey(prev, false);
-        if (k){ touchKeys[t.identifier] = k; setKey(k, true); }
-        else { delete touchKeys[t.identifier]; }
-      }
+      var t=e.changedTouches[i]; var k=keyFromPoint(t.clientX,t.clientY); if (k){ setKey(k,false); }
     }
     if (e.preventDefault) e.preventDefault();
   }, touchOpts);
-
-  function endTouches(e){
-    for (var i=0;i<e.changedTouches.length;i++){
-      var t = e.changedTouches[i];
-      var prev = touchKeys[t.identifier];
-      if (prev) setKey(prev, false);
-      delete touchKeys[t.identifier];
-    }
-    // sicurezza: se non restano dita, rilascia tutto
-    if (!e.touches || e.touches.length===0) resetKeys();
-    if (e.preventDefault) e.preventDefault();
-  }
-  touch.addEventListener('touchend', endTouches, touchOpts);
-  touch.addEventListener('touchcancel', endTouches, touchOpts);
-
-  // Mouse (desktop)
-  touch.addEventListener('mousedown',  function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,true); }, false);
-  touch.addEventListener('mouseup',    function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,false); }, false);
-  touch.addEventListener('mouseleave', function(){ resetKeys(); }, false);
+  controls.addEventListener('mousedown',  function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,true); }, false);
+  controls.addEventListener('mouseup',    function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,false); }, false);
 }
 
-// mute + toggle controls
+// Mute e toggle pad
 var btnMute = document.getElementById('btnMute');
-if (btnMute){
-  btnMute.addEventListener('click', function(){
-    audioEnabled = !audioEnabled;
-    btnMute.textContent = audioEnabled ? '🔊' : '🔇';
-  }, false);
-}
+if (btnMute){ btnMute.addEventListener('click', function(){ audioEnabled = !audioEnabled; btnMute.textContent = audioEnabled ? '🔊' : '🔇'; }, false); }
 var btnControls = document.getElementById('btnControls');
-if (btnControls){
-  btnControls.addEventListener('click', function(){
-    var pad = document.getElementById('touch');
-    if (!pad) return;
-    pad.classList.toggle('hidden');
-  }, false);
-}
+if (btnControls){ btnControls.addEventListener('click', function(){ var pad = controls && controls.querySelector('.pad'); if (pad) pad.classList.toggle('hidden'); }, false); }
 
-// service worker
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
 
 /* ====================== GAME ====================== */
 var W = canvas.width, H = canvas.height;
 var GRAV = 0.7, FRICTION = 0.85, MAX_LIVES = 3;
 
-var COLORS = {
-  bg:'#101634', wall:'#2b396b', door:'#3e8ef7', redDoor:'#f74d4d',
-  elevator:'#c7d2fe', hero:'#ffe08a', enemy:'#ff6b6b', bullet:'#eaf1ff', text:'#eaf1ff'
-};
-
 function floorY(floor, totalFloors){ var step=(H-64)/(totalFloors-1); return 32 + step*floor; }
-function clamp(v,min,max){ return v<min?min:(v>max?max:v); }
 function rectsOverlap(a,b){ return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h); }
 
 var LEVELS = [
@@ -201,32 +122,15 @@ var LEVELS = [
 ];
 
 var state = { levelIndex:0, lives:MAX_LIVES, gameOver:false };
-
-function Hero(x,y){
-  this.x=x; this.y=y; this.vx=0; this.vy=0; this.w=10; this.h=14;
-  this.facing=1; this.onGround=false; this.inElevator=null; this.reloading=0;
-}
+function Hero(x,y){ this.x=x; this.y=y; this.vx=0; this.vy=0; this.w=10; this.h=14; this.facing=1; this.inElevator=null; this.reloading=0; }
 Hero.prototype.update=function(world){
   var speed=1.6;
-
   if (this.inElevator){
-    // tieni un riferimento PRIMA di poter uscire
-    var el = this.inElevator;
-
-    if (Keys['ArrowUp']) el.vy = -el.speed;
-    else if (Keys['ArrowDown']) el.vy = el.speed;
-    else el.vy = 0;
-
-    var left = !!Keys['ArrowLeft'];
-    var right = !!Keys['ArrowRight'];
-    if (left || right){
-      this.x += (left?-1:1);
-      this.inElevator = null; // esci dall'ascensore
-    }
-
-    // usa sempre 'el' (può essere uscito dall'ascensore)
+    var el=this.inElevator;
+    if (Keys['ArrowUp']) el.vy = -el.speed; else if (Keys['ArrowDown']) el.vy = el.speed; else el.vy = 0;
+    var left=!!Keys['ArrowLeft'], right=!!Keys['ArrowRight'];
+    if (left||right){ this.x += (left?-1:1); this.inElevator=null; }
     this.y = el.y - this.h;
-
   } else {
     if (Keys['ArrowLeft']) { this.vx -= 0.5; this.facing=-1; }
     if (Keys['ArrowRight']){ this.vx += 0.5; this.facing= 1; }
@@ -236,73 +140,40 @@ Hero.prototype.update=function(world){
         this.inElevator = el2; playSfx('door');
       }
     }
-    this.vy += GRAV;
-    this.vx *= FRICTION;
-    if (this.vx> speed) this.vx = speed;
-    if (this.vx<-speed) this.vx = -speed;
-
+    this.vy += GRAV; this.vx *= FRICTION;
+    if (this.vx> 1.6) this.vx = 1.6; if (this.vx<-1.6) this.vx = -1.6;
     this.x += this.vx; this.y += this.vy;
-
     var fy = world.snapFloor(this);
-    if (fy!==null && this.y+this.h>fy){ this.y=fy-this.h; this.vy=0; this.onGround=true; }
-    else this.onGround=false;
+    if (fy!==null && this.y+this.h>fy){ this.y=fy-this.h; this.vy=0; }
   }
-
   if (this.reloading>0) this.reloading--;
   var fire = Keys['Enter']||Keys['Space']||Keys['KeyX']||Keys['KeyK'];
-  if (fire && this.reloading===0){
-    world.spawnBullet(this.x+this.w/2, this.y+6, this.facing);
-    this.reloading=14; playSfx('shot');
-  }
-
-  this.x = clamp(this.x,4,W-14);
+  if (fire && this.reloading===0){ world.spawnBullet(this.x+this.w/2, this.y+6, this.facing); this.reloading=14; playSfx('shot'); }
+  if (this.x<4) this.x=4; if (this.x>W-14) this.x=W-14;
   if (this.y+this.h>=H-8 && world.intelLeft()===0){ world.winLevel(); }
 };
-Hero.prototype.draw=function(){
-  ctx.fillStyle = COLORS.hero;
-  ctx.fillRect(this.x,this.y,this.w,this.h);
-  ctx.fillRect(this.facing>0?this.x+this.w:this.x-3, this.y+5, 3,2);
-};
+Hero.prototype.draw=function(){ ctx.fillStyle='#ffe08a'; ctx.fillRect(this.x,this.y,this.w,this.h); ctx.fillRect(this.facing>0?this.x+this.w:this.x-3,this.y+5,3,2); };
 
-function Enemy(x,floor,dir,world){
-  this.x=x; this.floor=floor; this.dir=dir||1; this.w=10; this.h=14;
-  this.y = floorY(floor, world.floors) - this.h;
-  this.reload = Math.floor(60+Math.random()*90);
-}
+function Enemy(x,floor,dir,world){ this.x=x; this.floor=floor; this.dir=dir||1; this.w=10; this.h=14; this.y=floorY(floor,world.floors)-this.h; this.reload=Math.floor(60+Math.random()*90); }
 Enemy.prototype.update=function(world){
-  var speed=0.6;
-  this.x += speed*this.dir;
-  if (this.x<8 || this.x>W-18) this.dir*=-1;
-  if (this.reload>0) this.reload--;
-  var hero = world.hero;
-  if (this.reload===0 && Math.abs(this.y-hero.y)<4){
-    var d = hero.x>this.x ? 1 : -1;
-    world.spawnBullet(this.x+this.w/2, this.y+6, d, true);
-    this.reload = Math.floor(90+Math.random()*120);
-    playSfx('shot');
-  }
+  var speed=0.6; this.x += speed*this.dir; if (this.x<8 || this.x>W-18) this.dir*=-1;
+  if (this.reload>0) this.reload--; var hero=world.hero;
+  if (this.reload===0 && Math.abs(this.y-hero.y)<4){ var d=hero.x>this.x?1:-1; world.spawnBullet(this.x+this.w/2,this.y+6,d,true); this.reload=Math.floor(90+Math.random()*120); playSfx('shot'); }
 };
-Enemy.prototype.draw=function(){ ctx.fillStyle=COLORS.enemy; ctx.fillRect(this.x,this.y,this.w,this.h); };
+Enemy.prototype.draw=function(){ ctx.fillStyle='#ff6b6b'; ctx.fillRect(this.x,this.y,this.w,this.h); };
 
 function Bullet(x,y,dir,evil){ this.x=x; this.y=y; this.dir=dir||1; this.evil=!!evil; this.w=4; this.h=2; this.life=90; }
 Bullet.prototype.update=function(world){
-  this.x += 3*this.dir; this.life--; if (this.life<=0) this.dead=true;
+  this.x += 3*this.dir; if(--this.life<=0) this.dead=true;
   var box={x:this.x,y:this.y,w:this.w,h:this.h};
-  if (this.evil){
-    var h=world.hero;
-    if (rectsOverlap(box,{x:h.x,y:h.y,w:h.w,h:h.h})){ world.hurtHero(); this.dead=true; }
-  } else {
-    for (var i=0;i<world.enemies.length;i++){
-      var e=world.enemies[i]; if (!e) continue;
-      if (rectsOverlap(box,{x:e.x,y:e.y,w:e.w,h:e.h})){ world.enemies.splice(i,1); this.dead=true; break; }
-    }
-  }
+  if (this.evil){ var h=world.hero; if (rectsOverlap(box,{x:h.x,y:h.y,w:h.w,h:h.h})){ world.hurtHero(); this.dead=true; } }
+  else { for (var i=0;i<world.enemies.length;i++){ var e=world.enemies[i]; if(e && rectsOverlap(box,{x:e.x,y:e.y,w:e.w,h:e.h})){ world.enemies.splice(i,1); this.dead=true; break; } } }
 };
-Bullet.prototype.draw=function(){ ctx.fillStyle=COLORS.bullet; ctx.fillRect(this.x,this.y,this.w,this.h); };
+Bullet.prototype.draw=function(){ ctx.fillStyle='#eaf1ff'; ctx.fillRect(this.x,this.y,this.w,this.h); };
 
 function Elevator(x,yMin,yMax,speed){ this.x=x; this.yMin=yMin; this.yMax=yMax; this.y=yMin; this.vy=speed; this.speed=speed; this.w=20; this.h=4; }
 Elevator.prototype.update=function(){ this.y+=this.vy; if (this.y<this.yMin){this.y=this.yMin; this.vy=Math.abs(this.vy);} if (this.y>this.yMax){this.y=this.yMax; this.vy=-Math.abs(this.vy);} };
-Elevator.prototype.draw=function(){ ctx.fillStyle=COLORS.elevator; ctx.fillRect(this.x-10,this.y,this.w,this.h); };
+Elevator.prototype.draw=function(){ ctx.fillStyle='#c7d2fe'; ctx.fillRect(this.x-10,this.y,this.w,this.h); };
 
 function Door(x,floor,red,world){ this.x=x; this.floor=floor; this.red=!!red; this.w=14; this.h=12; this.y=floorY(floor,world.floors)-this.h; this.opened=false; }
 Door.prototype.tryOpen=function(hero,world){
@@ -312,7 +183,7 @@ Door.prototype.tryOpen=function(hero,world){
   if (near && action){ this.opened=true; if (this.red){ world.intelGot++; playSfx('pick'); } else { playSfx('door'); } return true; }
   return false;
 };
-Door.prototype.draw=function(){ ctx.fillStyle=this.red?COLORS.redDoor:COLORS.door; ctx.fillRect(this.x,this.y,this.w,this.h); };
+Door.prototype.draw=function(){ ctx.fillStyle=this.red?'#f74d4d':'#3e8ef7'; ctx.fillRect(this.x,this.y,this.w,this.h); };
 
 function World(def){
   this.floors=def.floors; this.doors=[]; this.elevs=[]; this.enemies=[]; this.bullets=[];
@@ -323,16 +194,9 @@ function World(def){
   for (i=0;i<def.elevators.length;i++){ e=def.elevators[i]; this.elevs.push(new Elevator(e.x,e.yMin,e.yMax,e.speed)); }
   for (i=0;i<def.enemies.length;i++){ en=def.enemies[i]; this.enemies.push(new Enemy(en.x,en.floor,en.dir,this)); }
 }
-World.prototype.snapFloor=function(ent){
-  var closest=null; for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); if (ent.y+ent.h<=y && (closest===null || y<closest)) closest=y; } return closest;
-};
+World.prototype.snapFloor=function(ent){ var closest=null; for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); if (ent.y+ent.h<=y && (closest===null || y<closest)) closest=y; } return closest; };
 World.prototype.elevatorsNear=function(ent){
-  for (var i=0;i<this.elevs.length;i++){
-    var el=this.elevs[i];
-    var nearX=Math.abs((ent.x+ent.w/2)-el.x)<8;
-    var nearY=Math.abs((el.y-ent.h)-ent.y)<5;
-    if (nearX && nearY) return el;
-  }
+  for (var i=0;i<this.elevs.length;i++){ var el=this.elevs[i]; var nearX=Math.abs((ent.x+ent.w/2)-el.x)<8; var nearY=Math.abs((el.y-ent.h)-ent.y)<5; if (nearX && nearY) return el; }
   return null;
 };
 World.prototype.spawnBullet=function(x,y,dir,evil){ this.bullets.push(new Bullet(x,y,dir,evil)); };
@@ -346,8 +210,8 @@ World.prototype.update=function(){
   for (i=0;i<this.bullets.length;i++){ b=this.bullets[i]; b.update(this); if (b.dead){ this.bullets.splice(i,1); i--; } }
 };
 World.prototype.draw=function(){
-  ctx.fillStyle=COLORS.bg; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle=COLORS.wall; ctx.lineWidth=1;
+  ctx.fillStyle='#101634'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#2b396b'; ctx.lineWidth=1;
   for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
   for (var i=0;i<this.elevs.length;i++) this.elevs[i].draw();
   for (i=0;i<this.doors.length;i++) this.doors[i].draw();
@@ -356,12 +220,11 @@ World.prototype.draw=function(){
   for (i=0;i<this.enemies.length;i++) this.enemies[i].draw();
   for (i=0;i<this.bullets.length;i++) this.bullets[i].draw();
   this.hero.draw();
-  ctx.fillStyle=COLORS.text; ctx.font='12px monospace'; ctx.fillText('Docs:'+this.intelGot+'/'+this.intelTotal,8,12);
+  ctx.fillStyle='#eaf1ff'; ctx.font='12px monospace'; ctx.fillText('Docs:'+this.intelGot+'/'+this.intelTotal,8,12);
 
   if (showDebug){
     var ktext = Object.keys(Keys).filter(function(k){return Keys[k];}).join(' ');
-    ctx.fillStyle='rgba(0,0,0,0.5)';
-    ctx.fillRect(6, H-36, 220, 30);
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(6, H-36, 220, 30);
     ctx.fillStyle='#fff'; ctx.font='11px monospace';
     ctx.fillText('Keys: '+ktext, 10, H-16);
   }
@@ -371,17 +234,25 @@ World.prototype.winLevel=function(){ state.levelIndex++; if (state.levelIndex>=L
 var world=null;
 function startLevel(idx){
   world = new World(LEVELS[idx]);
-  document.getElementById('level').textContent = 'LV '+(idx+1);
-  document.getElementById('intel').textContent = '📄 0/'+world.intelTotal;
+  var lvl = document.getElementById('level'); if (lvl) lvl.textContent = 'LV '+(idx+1);
+  var intel = document.getElementById('intel'); if (intel) intel.textContent = '📄 0/'+world.intelTotal;
+  updateHud();
 }
 function updateHud(){
   if (!world) return;
-  document.getElementById('intel').textContent = '📄 '+world.intelGot+'/'+world.intelTotal;
+  var intel = document.getElementById('intel'); if (intel) intel.textContent = '📄 '+world.intelGot+'/'+world.intelTotal;
   var hearts=''; for (var i=0;i<state.lives;i++) hearts+='❤';
-  document.getElementById('lives').textContent = hearts || '—';
+  var livesEl = document.getElementById('lives'); if (livesEl) livesEl.textContent = hearts || '—';
+}
+function drawStartScreen(){
+  ctx.fillStyle='#0b1022'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#eaf1ff'; ctx.font='18px monospace'; ctx.fillText('ELEVATOR ACTION', W/2-100, H/2-16);
+  ctx.font='12px monospace'; ctx.fillText('Premi START o Enter', W/2-80, H/2+8);
 }
 function loop(){
-  if (!state.gameOver){
+  if (!started){
+    drawStartScreen();
+  } else if (!state.gameOver){
     world.update(); world.draw(); updateHud();
   } else {
     ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,W,H);
@@ -392,22 +263,30 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
+function startGame(){
+  if (started) return;
+  started = true;
+  audioUnlocked = true;
+  var ov = document.getElementById('startOverlay'); if (ov) ov.style.display='none';
+  startLevel(0);
+  try{ canvas.focus(); }catch(e){}
+}
+
 function bootstrap(){
   loadAudio();
-  startLevel(0);
-  setTimeout(function(){ var b=document.getElementById('banner'); if(b) b.style.display='none'; }, 5000);
-  setInterval(updateHud,200);
-
+  // overlay START attivo; avvia loop subito per disegnare start screen
+  var btnStart = document.getElementById('btnStart');
+  if (btnStart){ btnStart.addEventListener('click', startGame, false); }
+  // sblocco audio al primo tap/click
   var unlock=function(){ audioUnlocked=true; };
   canvas.addEventListener('touchstart', unlock, touchOpts);
   canvas.addEventListener('mousedown', unlock, false);
-
-  // focus canvas sempre
+  // focus
   function focusCanvas(){ try{ canvas.focus(); }catch(e){} }
-  focusCanvas();
   document.addEventListener('mousedown', focusCanvas, false);
   document.addEventListener('touchstart', focusCanvas, touchOpts);
-
   loop();
 }
-bootstrap();
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') { bootstrap(); }
+else { document.addEventListener('DOMContentLoaded', bootstrap, false); }
