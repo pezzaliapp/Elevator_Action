@@ -1,5 +1,5 @@
 // sw.js — Elevator Action PWA (cache-first + offline fallback) 
-var CACHE = 'elevator-action-v7';
+var CACHE = 'elevator-action-v8';
 var ASSETS = [
   './','./index.html','./app.js','./manifest.webmanifest',
   './assets/icon-192.png','./assets/icon-512.png',
@@ -8,10 +8,7 @@ var ASSETS = [
 ];
 self.addEventListener('install', function(e){
   e.waitUntil(
-    caches.open(CACHE)
-      .then(function(c){ return c.addAll(ASSETS); })
-      .then(function(){ return self.skipWaiting(); })
-      .catch(function(err){ console.warn('[SW] Install warning:', err); })
+    caches.open(CACHE).then(function(c){ return c.addAll(ASSETS); }).then(function(){ return self.skipWaiting(); })
   );
 });
 self.addEventListener('activate', function(e){

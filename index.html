@@ -15,49 +15,27 @@
     #wrap{display:flex;flex-direction:column;min-height:100%}
     header{padding:8px 12px;background:#0e1533;border-bottom:1px solid #1a2559}
     header h1{margin:0;font-size:16px;text-align:center}
-    #gamebox{
-      flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-      padding:16px 10px 10px; gap:12px;
-    }
+    #gamebox{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px 10px 10px;gap:12px}
     canvas{background:#090f28;border:1px solid #1a2559;border-radius:12px;touch-action:none;display:block}
-    #hud{
-      position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;z-index:10000
-    }
+    #hud{position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;z-index:10000}
     #hud span{margin-right:10px}
-
-    /* controlli sotto al canvas, centrati */
-    #controls{
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-      width:100%;max-width:480px;
-    }
+    #controls{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;max-width:480px}
     .pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,64px);gap:10px;justify-content:center}
     .btn{user-select:none;-webkit-user-select:none;touch-action:manipulation;border:1px solid #1a2559;background:#141c44;color:#eaf1ff;border-radius:16px;padding:14px 16px;min-width:64px;text-align:center}
     .wide{min-width:140px;font-weight:600}
     .hidden{display:none !important}
-
     #banner{background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:8px 10px;max-width:90vw;text-align:center}
-
-    /* START overlay */
-    #startOverlay{
-      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-      background:radial-gradient(ellipse at center, rgba(11,16,34,0.2), rgba(11,16,34,0.85));
-      z-index:20000;
-    }
-    #startCard{
-      background:#0e1533;border:1px solid #1a2559;border-radius:16px;padding:18px 22px;text-align:center;
-      box-shadow:0 10px 30px rgba(0,0,0,0.3);
-      max-width:420px
-    }
+    #startOverlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center, rgba(11,16,34,0.2), rgba(11,16,34,0.85));z-index:20000}
+    #startCard{background:#0e1533;border:1px solid #1a2559;border-radius:16px;padding:18px 22px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-width:420px}
     #btnStart{font-size:18px}
+    #debugBar{position:fixed;left:8px;bottom:8px;background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;font:12px/1.2 monospace;opacity:.9;max-width:70vw;z-index:15000}
   </style>
 </head>
 <body>
 <div id="wrap">
   <header><h1>Elevator Action — PezzaliAPP Edition</h1></header>
-
   <div id="gamebox">
     <canvas id="screen" width="384" height="512" tabindex="0" aria-label="Elevator Action Game Canvas"></canvas>
-
     <div id="controls">
       <div class="pad" aria-hidden="true">
         <div class="btn" data-k="ArrowLeft">◀︎</div>
@@ -74,10 +52,8 @@
         <button id="btnMute" class="btn">🔊</button>
       </div>
     </div>
-
     <div id="banner">Suggerimento: raccogli i documenti dietro le <b>porte rosse</b>, poi raggiungi l'uscita al piano terra.</div>
   </div>
-
   <div id="hud">
     <span id="level">LV 1</span>
     <span id="intel">📄 0/0</span>
@@ -86,7 +62,6 @@
   </div>
 </div>
 
-<!-- START overlay -->
 <div id="startOverlay">
   <div id="startCard">
     <h2 style="margin:0 0 8px 0">Elevator Action</h2>
@@ -95,7 +70,8 @@
   </div>
 </div>
 
-<!-- Audio elements -->
+<div id="debugBar">diag…</div>
+
 <audio id="sfx_step" preload="auto" playsinline></audio>
 <audio id="sfx_door" preload="auto" playsinline></audio>
 <audio id="sfx_pick" preload="auto" playsinline></audio>
@@ -103,7 +79,6 @@
 
 <script src="./app.js"></script>
 <script>
-// PWA install prompt
 (function(){
   var btn = document.getElementById('btnInstall');
   var deferred = null;
