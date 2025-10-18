@@ -2,40 +2,41 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <title>Elevator Action — PezzaliAPP Edition (PWA)</title>
+  <title>Elevator Action — PezzaliAPP (Rewrite)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#0b1022">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" href="./assets/icon-192.png">
   <style>
+    :root{--bg:#0b1022;--card:#0e1533;--b:#1a2559;--fg:#eaf1ff}
     html,body{height:100%}
-    body{margin:0;background:#0b1022;color:#eaf1ff;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    #wrap{display:flex;flex-direction:column;min-height:100%}
-    header{padding:8px 12px;background:#0e1533;border-bottom:1px solid #1a2559}
-    header h1{margin:0;font-size:16px;text-align:center}
-    #gamebox{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px 10px 10px;gap:12px}
-    canvas{background:#090f28;border:1px solid #1a2559;border-radius:12px;touch-action:none;display:block}
-    #hud{position:fixed;top:8px;right:8px;background:#0e1533bd;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;z-index:10000}
-    #hud span{margin-right:10px}
-    #controls{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;max-width:480px}
+    body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    header{padding:8px 12px;background:var(--card);border-bottom:1px solid var(--b);text-align:center}
+    header h1{margin:0;font-size:16px}
+    #gamebox{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px}
+    canvas{background:#0a1026;border:1px solid var(--b);border-radius:12px;touch-action:none;display:block}
+    #hud{display:flex;gap:12px;align-items:center;justify-content:center}
+    .pill{background:var(--card);border:1px solid var(--b);border-radius:10px;padding:6px 10px}
+    #controls{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:8px}
     .pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,64px);gap:10px;justify-content:center}
-    .btn{user-select:none;-webkit-user-select:none;touch-action:manipulation;border:1px solid #1a2559;background:#141c44;color:#eaf1ff;border-radius:16px;padding:14px 16px;min-width:64px;text-align:center}
+    .btn{border:1px solid var(--b);background:#141c44;color:var(--fg);border-radius:16px;padding:14px 16px;min-width:64px;text-align:center;user-select:none}
     .wide{min-width:140px;font-weight:600}
-    .hidden{display:none !important}
-    #banner{background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:8px 10px;max-width:90vw;text-align:center}
-    #startOverlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center, rgba(11,16,34,0.2), rgba(11,16,34,0.85));z-index:20000}
-    #startCard{background:#0e1533;border:1px solid #1a2559;border-radius:16px;padding:18px 22px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-width:420px}
-    #btnStart{font-size:18px}
-    #debugBar{position:fixed;left:8px;bottom:8px;background:#0e1533;border:1px solid #1a2559;border-radius:10px;padding:6px 10px;font:12px/1.2 monospace;opacity:.9;max-width:70vw;z-index:15000}
+    #startOverlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:10}
+    #startCard{background:var(--card);border:1px solid var(--b);border-radius:16px;padding:18px 22px;box-shadow:0 10px 30px rgba(0,0,0,.35);text-align:center}
+    #banner{opacity:.9}
+    @media (max-width:900px){ body{padding-bottom:16px} }
   </style>
 </head>
 <body>
-<div id="wrap">
-  <header><h1>Elevator Action — PezzaliAPP Edition</h1></header>
+  <header><h1>Elevator Action — PezzaliAPP (Rewrite)</h1></header>
   <div id="gamebox">
     <canvas id="screen" width="384" height="512" tabindex="0" aria-label="Elevator Action Game Canvas"></canvas>
+    <div id="hud" class="pill">
+      <span id="level">LV 1</span>
+      <span id="intel">📄 0/0</span>
+      <span id="lives">❤❤❤</span>
+      <button id="btnMute" class="btn">🔊</button>
+    </div>
     <div id="controls">
       <div class="pad" aria-hidden="true">
         <div class="btn" data-k="ArrowLeft">◀︎</div>
@@ -48,47 +49,35 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
         <div class="btn wide" data-k="ArrowUp">SALI/ENTRA</div>
         <div class="btn wide" data-k="Enter">FIRE</div>
-        <button id="btnControls" class="btn">🎮</button>
-        <button id="btnMute" class="btn">🔊</button>
       </div>
+      <div id="banner" class="pill">Obiettivo: prendi i documenti dietro le <b>porte rosse</b> e raggiungi la <b>pedana verde</b>.</div>
     </div>
-    <div id="banner">Suggerimento: raccogli i documenti dietro le <b>porte rosse</b>, poi raggiungi l'uscita al piano terra.</div>
   </div>
-  <div id="hud">
-    <span id="level">LV 1</span>
-    <span id="intel">📄 0/0</span>
-    <span id="lives">❤❤❤</span>
-    <button id="btnInstall" class="btn" style="display:none">⬇️ Installa</button>
+
+  <!-- START overlay -->
+  <div id="startOverlay">
+    <div id="startCard">
+      <h2 style="margin:0 0 8px 0">Elevator Action</h2>
+      <p style="margin:0 0 14px 0">Premi <b>START</b> o <b>Enter</b> per iniziare.</p>
+      <button id="btnStart" class="btn wide">▶️ START</button>
+    </div>
   </div>
-</div>
 
-<div id="startOverlay">
-  <div id="startCard">
-    <h2 style="margin:0 0 8px 0">Elevator Action</h2>
-    <p style="margin:0 0 14px 0;opacity:.9">Premi <b>START</b> (o <b>Enter</b>) per iniziare.<br>Usa i tasti o i pulsanti sotto al gioco.</p>
-    <button id="btnStart" class="btn wide">▶️ START</button>
-  </div>
-</div>
+  <!-- Audio (opzionale; non blocca) -->
+  <audio id="sfx_pick" preload="auto" playsinline>
+    <source src="./assets/sfx/pickup.wav" type="audio/wav">
+    <source src="./assets/sfx/pickup.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="sfx_shot" preload="auto" playsinline>
+    <source src="./assets/sfx/shot.wav" type="audio/wav">
+    <source src="./assets/sfx/shot.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="sfx_door" preload="auto" playsinline>
+    <source src="./assets/sfx/door.wav" type="audio/wav">
+    <source src="./assets/sfx/door.mp3" type="audio/mpeg">
+  </audio>
 
-<div id="debugBar">diag…</div>
-
-<audio id="sfx_step" preload="auto" playsinline></audio>
-<audio id="sfx_door" preload="auto" playsinline></audio>
-<audio id="sfx_pick" preload="auto" playsinline></audio>
-<audio id="sfx_shot" preload="auto" playsinline></audio>
-
-<script src="./app.js"></script>
-<script>
-(function(){
-  var btn = document.getElementById('btnInstall');
-  var deferred = null;
-  window.addEventListener('beforeinstallprompt', function(e){
-    e.preventDefault(); deferred = e; btn.style.display='inline-block';
-  });
-  btn.addEventListener('click', function(){
-    if(deferred){ deferred.prompt(); deferred=null; btn.style.display='none'; }
-  });
-})();
-</script>
+  <script src="./app.js"></script>
+  <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}</script>
 </body>
 </html>
