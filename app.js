@@ -1,11 +1,13 @@
-/* app.js — Elevator Action — PezzaliAPP Edition (ES5) */
+/* app.js v3 — Elevator Action — PezzaliAPP Edition (ES5)
+ * Migliorie: START overlay + controlli schermo con Pointer Events e "auto-hold" sui tap brevi.
+ */
 if (!window.requestAnimationFrame) { window.requestAnimationFrame = function (cb) { return setTimeout(cb, 16); }; }
 
 var canvas = document.getElementById('screen');
 var ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
 if (!canvas || !ctx) { alert('Canvas non inizializzato.'); throw new Error('Canvas missing'); }
 
-var started = false;        // ▶️ gating avvio
+var started = false;
 var audioEnabled = true;
 var audioUnlocked = false;
 var SFX = {};
@@ -17,15 +19,13 @@ var AUDIO_SPRITES = {
 };
 
 function loadAudio() {
-  ['step','door','pick','shot'].forEach(function(id){
-    var el = document.getElementById('sfx_'+id);
-    if (el) { el.src = AUDIO_SPRITES[id] || ''; SFX[id] = el; }
-  });
+  var ids = ['step','door','pick','shot'];
+  for (var i=0;i<ids.length;i++){
+    var id=ids[i], el=document.getElementById('sfx_'+id);
+    if (el){ el.src = AUDIO_SPRITES[id] || ''; SFX[id]=el; }
+  }
 }
-function playSfx(id){
-  if (!audioEnabled || !audioUnlocked || !SFX[id]) return;
-  try { SFX[id].currentTime = 0; SFX[id].play(); } catch(e){}
-}
+function playSfx(id){ if (!audioEnabled || !audioUnlocked || !SFX[id]) return; try{ SFX[id].currentTime=0; SFX[id].play(); }catch(e){} }
 
 /* ====================== INPUT ====================== */
 var Keys = {};
@@ -49,48 +49,58 @@ function onKey(e, down){
     e.returnValue = false;
   }
 
-  // START con Enter/Space
-  if (!started && down && (name==='Enter' || name==='Space')) {
-    startGame();
-  }
+  if (!started && down && (name==='Enter' || name==='Space')) startGame();
 }
 function resetKeys(){ for (var k in Keys) Keys[k] = false; }
 window.addEventListener('keydown', function(e){ onKey(e,true); }, false);
 window.addEventListener('keyup',   function(e){ onKey(e,false); }, false);
 window.addEventListener('blur',    function(){ resetKeys(); }, false);
 
-// TOUCH PAD
-var supportsPassive=false;
-try{
-  var opts = Object.defineProperty({},'passive',{get:function(){supportsPassive=true;}});
-  window.addEventListener('testPassive',function(){},opts);
-  window.removeEventListener('testPassive',function(){},opts);
-}catch(e){}
-var touchOpts = supportsPassive ? {passive:false} : false;
-
+/* === On-screen controls (Pointer Events + auto-hold) === */
 var controls = document.getElementById('controls');
-function keyFromPoint(x,y){
-  var el = document.elementFromPoint(x,y);
-  if (!el || !el.getAttribute) return null;
-  return el.getAttribute('data-k') || null;
+var activePointers = {};   // id -> {k, t0}
+var autoHoldFrames = {};   // k -> remaining frames to keep pressed
+
+function getKeyFromTarget(t){
+  if (!t || !t.getAttribute) return null;
+  return t.getAttribute('data-k') || null;
 }
-function setKey(k, down){ if (!k) return; Keys[k] = !!down; if (down) audioUnlocked = true; }
+function setKey(k, down){ if (!k) return; Keys[k]=!!down; if (down) audioUnlocked=true; }
 
 if (controls){
-  controls.addEventListener('touchstart', function(e){
-    for (var i=0;i<e.changedTouches.length;i++){
-      var t=e.changedTouches[i]; var k=keyFromPoint(t.clientX,t.clientY); if (k){ setKey(k,true); }
+  // Prefer pointer events, fallback to mouse/touch handled by browser mapping
+  controls.addEventListener('pointerdown', function(e){
+    var k = getKeyFromTarget(e.target);
+    if (!k) return;
+    activePointers[e.pointerId] = {k:k, t0:(performance.now?performance.now():Date.now())};
+    setKey(k, true);
+    e.preventDefault && e.preventDefault();
+  }, false);
+
+  function endPointer(e){
+    var info = activePointers[e.pointerId];
+    var k = info ? info.k : getKeyFromTarget(e.target);
+    var t0 = info ? info.t0 : (performance.now?performance.now():Date.now());
+    var t1 = (performance.now?performance.now():Date.now());
+    var dt = t1 - t0;
+    delete activePointers[e.pointerId];
+    setKey(k, false);
+
+    // Se è stato un TAP breve (<140ms) su una freccia, auto-hold per 8 frame
+    if (k && dt < 140 && (k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown')){
+      autoHoldFrames[k] = 8;
     }
-    if (e.preventDefault) e.preventDefault();
-  }, touchOpts);
-  controls.addEventListener('touchend', function(e){
-    for (var i=0;i<e.changedTouches.length;i++){
-      var t=e.changedTouches[i]; var k=keyFromPoint(t.clientX,t.clientY); if (k){ setKey(k,false); }
-    }
-    if (e.preventDefault) e.preventDefault();
-  }, touchOpts);
-  controls.addEventListener('mousedown',  function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,true); }, false);
-  controls.addEventListener('mouseup',    function(e){ var k=keyFromPoint(e.clientX,e.clientY); setKey(k,false); }, false);
+
+    e.preventDefault && e.preventDefault();
+  }
+  controls.addEventListener('pointerup', endPointer, false);
+  controls.addEventListener('pointercancel', endPointer, false);
+  controls.addEventListener('pointerleave', function(e){
+    var info = activePointers[e.pointerId];
+    if (!info) return;
+    setKey(info.k, false);
+    delete activePointers[e.pointerId];
+  }, false);
 }
 
 // Mute e toggle pad
@@ -125,6 +135,12 @@ var state = { levelIndex:0, lives:MAX_LIVES, gameOver:false };
 function Hero(x,y){ this.x=x; this.y=y; this.vx=0; this.vy=0; this.w=10; this.h=14; this.facing=1; this.inElevator=null; this.reloading=0; }
 Hero.prototype.update=function(world){
   var speed=1.6;
+
+  // applica eventuale auto-hold (tap breve)
+  for (var k in autoHoldFrames){
+    if (autoHoldFrames[k] > 0){ Keys[k] = true; autoHoldFrames[k]--; if (autoHoldFrames[k]===0) Keys[k]=false; }
+  }
+
   if (this.inElevator){
     var el=this.inElevator;
     if (Keys['ArrowUp']) el.vy = -el.speed; else if (Keys['ArrowDown']) el.vy = el.speed; else el.vy = 0;
@@ -194,7 +210,9 @@ function World(def){
   for (i=0;i<def.elevators.length;i++){ e=def.elevators[i]; this.elevs.push(new Elevator(e.x,e.yMin,e.yMax,e.speed)); }
   for (i=0;i<def.enemies.length;i++){ en=def.enemies[i]; this.enemies.push(new Enemy(en.x,en.floor,en.dir,this)); }
 }
-World.prototype.snapFloor=function(ent){ var closest=null; for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); if (ent.y+ent.h<=y && (closest===null || y<closest)) closest=y; } return closest; };
+World.prototype.snapFloor=function(ent){
+  var closest=null; for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); if (ent.y+ent.h<=y && (closest===null || y<closest)) closest=y; } return closest;
+};
 World.prototype.elevatorsNear=function(ent){
   for (var i=0;i<this.elevs.length;i++){ var el=this.elevs[i]; var nearX=Math.abs((ent.x+ent.w/2)-el.x)<8; var nearY=Math.abs((el.y-ent.h)-ent.y)<5; if (nearX && nearY) return el; }
   return null;
@@ -215,6 +233,7 @@ World.prototype.draw=function(){
   for (var f=0; f<this.floors; f++){ var y=floorY(f,this.floors); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
   for (var i=0;i<this.elevs.length;i++) this.elevs[i].draw();
   for (i=0;i<this.doors.length;i++) this.doors[i].draw();
+  // Uscita (verde) è statica per design
   ctx.fillStyle='#2e7d32'; ctx.fillRect(W-72,H-12,64,8);
   ctx.fillStyle='#a5d6a7'; ctx.fillRect(W-64,H-20,48,8);
   for (i=0;i<this.enemies.length;i++) this.enemies[i].draw();
@@ -224,7 +243,8 @@ World.prototype.draw=function(){
 
   if (showDebug){
     var ktext = Object.keys(Keys).filter(function(k){return Keys[k];}).join(' ');
-    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(6, H-36, 220, 30);
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(6, H-36, 220, 30);
     ctx.fillStyle='#fff'; ctx.font='11px monospace';
     ctx.fillText('Keys: '+ktext, 10, H-16);
   }
@@ -274,17 +294,15 @@ function startGame(){
 
 function bootstrap(){
   loadAudio();
-  // overlay START attivo; avvia loop subito per disegnare start screen
   var btnStart = document.getElementById('btnStart');
   if (btnStart){ btnStart.addEventListener('click', startGame, false); }
-  // sblocco audio al primo tap/click
   var unlock=function(){ audioUnlocked=true; };
-  canvas.addEventListener('touchstart', unlock, touchOpts);
+  canvas.addEventListener('touchstart', unlock, false);
   canvas.addEventListener('mousedown', unlock, false);
   // focus
   function focusCanvas(){ try{ canvas.focus(); }catch(e){} }
   document.addEventListener('mousedown', focusCanvas, false);
-  document.addEventListener('touchstart', focusCanvas, touchOpts);
+  document.addEventListener('touchstart', focusCanvas, false);
   loop();
 }
 
